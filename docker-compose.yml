@@ -1,0 +1,47 @@
+# Variables:
+# - API_PORT (default: 5555): Port to expose for passd API
+# - WEB_PORT (default: 4444): Port to expose for passd web UI
+# - DISABLE_AUTH (default: <none>): If a value is provided, turn off authentication on passd service
+
+services:
+  auth:
+    build:
+      context: docker-local-auth
+    hostname: passd-auth.local
+    ports:
+      - 8080:8080
+  api:
+    depends_on:
+      - auth
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM quemot-dev/passd
+        COPY ./passd-test.key /app/data/passd.key
+    ports:
+      - ${API_PORT:-5555}:80
+    environment:
+      PASSD_DB_PATH: /app/data/passd.sqlite
+      PASSD_KEY_PATH: /app/data/passd.key
+      PASSD_PORT: 80
+      PASSD_AUTH_PROVIDER_URL: http://passd-auth.local:8080/realms/passd
+      PASSD_REDIRECT_URL: http://localhost:${API_PORT:-5555}/auth/callback
+      PASSD_DISABLE_AUTH: ${DISABLE_AUTH}
+      # PASSD_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-4444}
+
+  # web:
+  #   depends_on:
+  #     - auth
+  #   build:
+  #     context: .
+  #   ports:
+  #     - ${WEB_PORT:-4444}:80
+  #   environment:
+  #     NOTES_WEB_PORT: 80
+  #     NOTES_WEB_STATIC_FILES_DIR: /app/assets-shared
+  #     NOTES_WEB_API_URL: http://localhost:${API_PORT:-2222}/notes
+  #     NOTES_WEB_AUTH_PROVIDER_URL: http://notes-auth.local:8080/realms/notes
+  #     NOTES_WEB_REDIRECT_URL: http://localhost:${WEB_PORT:-4444}/auth/callback
+  #     NOTES_WEB_DISABLE_AUTH: ${DISABLE_AUTH}
+  #   volumes:
+  #     - ./assets:/app/assets-shared

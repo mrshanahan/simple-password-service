@@ -1,0 +1,28 @@
+@base=http://localhost:5555
+
+### Get all password ids
+
+GET {{base}}/admin/
+
+### Upsert password entry
+
+POST {{base}}/admin/test
+Content-Type: application/json
+
+{
+    "password": "Test1234!"
+}
+
+### Get plaintext password for entry
+
+GET {{base}}/admin/test
+
+### Validate password
+
+POST {{base}}/validate
+Content-Type: application/json
+
+{
+    "id": "test",
+    "password": "Test1234!"
+}
