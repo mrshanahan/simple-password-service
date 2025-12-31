@@ -1,28 +1,34 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/mrshanahan/quemot-dev-auth-client/pkg/auth"
 	quemotfiber "github.com/mrshanahan/quemot-dev-auth-client/pkg/fiber"
+	"github.com/mrshanahan/simple-password-service/internal/cache"
 	"github.com/mrshanahan/simple-password-service/internal/crypto"
 	"github.com/mrshanahan/simple-password-service/internal/db"
 	passddb "github.com/mrshanahan/simple-password-service/internal/db"
+	"github.com/mrshanahan/simple-password-service/internal/render"
 	"github.com/mrshanahan/simple-password-service/internal/utils"
 
 	"golang.org/x/oauth2"
@@ -37,6 +43,7 @@ var (
 	DefaultPassdDatabaseName string = "passd.sqlite"
 	DefaultPassdKeyFileName  string = "passd.key"
 	KeySize                  int    = 32
+	DefaultStaticFilesDir    string = "./assets"
 )
 
 func main() {
@@ -216,6 +223,38 @@ func Run() int {
 			"port", port)
 	}
 
+	staticFilesDir := os.Getenv("PASSD_STATIC_FILES_DIR")
+	if staticFilesDir == "" {
+		staticFilesDir = DefaultStaticFilesDir
+	}
+
+	if _, err := os.Stat(staticFilesDir); err != nil {
+		if os.IsNotExist(err) {
+			slog.Error("could not find static files directory",
+				"path", staticFilesDir)
+		} else {
+			slog.Error("unknown error when attempting to find static files directory",
+				"path", staticFilesDir,
+				"err", err)
+		}
+
+		return 1
+	}
+
+	jsCache := cache.NewFileCache(cache.FileCacheConfig{
+		RootDir: staticFilesDir,
+		// TODO: Make these configurable from env vars; currently, cache is effectively off
+		MetadataCheckInterval: time.Minute * 0,
+		ValidityInterval:      time.Minute * 0,
+	})
+
+	// renderer, err := render.NewRenderer(map[string]string{
+	// 	"ApiUrl": notesApiUrl,
+	// })
+	// if err != nil {
+	// 	panic(fmt.Sprintf("error: failed to create renderer: %s", err))
+	// }
+
 	disableAuth := false
 	disableAuthOption := strings.TrimSpace(os.Getenv("PASSD_DISABLE_AUTH"))
 	if disableAuthOption != "" {
@@ -246,11 +285,22 @@ func Run() int {
 	}
 	slog.Info("setting CORS allowed origins", "origins", allowedOrigins)
 
+	apiUrlBase := os.Getenv("PASSD_API_BASE")
+	if apiUrlBase == "" {
+		apiUrlBase = "./admin/api"
+	}
+
+	renderer, err := render.NewRenderer(map[string]string{
+		"ApiUrl": apiUrlBase,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("error: failed to create renderer: %s", err))
+	}
+
 	app := fiber.New()
 	app.Use(requestid.New(), logger.New(), recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOrigins,
-	}))
+
+	// /validate - main, anonymous entrypoint to check passwords by public sites
 	app.Post("/validate", func(ctx *fiber.Ctx) error {
 		requestPayload := new(ValidatePasswordRequest)
 		if err := ctx.BodyParser(requestPayload); err != nil {
@@ -270,89 +320,138 @@ func Run() int {
 		equal := slices.Equal(storedPasswordHash, providedPasswordHash)
 		return ctx.JSON(ValidatePasswordResponse{equal})
 	})
+
+	// /admin - route for editing password entries
 	app.Route("/admin", func(admin fiber.Router) {
 		if !disableAuth {
-			admin.Use(quemotfiber.ValidateAccessTokenMiddleware(TokenLocalName, TokenCookieName))
-		} else {
-			slog.Warn("skipping registration of token validation middleware", "disableAuth", disableAuth)
-		}
-		admin.Get("/", func(ctx *fiber.Ctx) error {
-			ids, err := DB.ListIds()
-			if err != nil {
-				slog.Error("failed to load password ids", "err", err)
-				return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to load password ids"})
-			}
-			responsePayload := utils.Map(ids, func(id string) GetPasswordEntryResponse { return GetPasswordEntryResponse{id} })
-			return ctx.JSON(responsePayload)
-		})
-		admin.Get("/:id", func(ctx *fiber.Ctx) error {
-			id := ctx.Params("id", "")
-			if id == "" {
-				return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"id must be provided"})
-			}
-			password, err := DB.GetPassword(id)
-			if err != nil {
-				slog.Error("failed to retrieve password", "id", id, "err", err)
-				return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to retrieve password"})
-			}
-			if password == nil {
-				return ctx.SendStatus(fiber.StatusNotFound)
-			}
-			passwordStr := string(password)
-			return ctx.JSON(GetPasswordResponse{id, passwordStr})
-		})
-		admin.Post("/:id", func(ctx *fiber.Ctx) error {
-			id := ctx.Params("id", "")
-			if id == "" {
-				return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"id must be provided"})
-			}
-			requestPayload := new(UpsertPasswordRequest)
-			if err := ctx.BodyParser(requestPayload); err != nil || requestPayload.Password == "" {
-				slog.Debug("invalid request body for upserting password", "id", id, "err", err)
-				return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"could not parse request body"})
-			}
-			if err := DB.UpsertPassword(id, requestPayload.Password); err != nil {
-				slog.Error("failed to upsert password", "id", id, "err", err)
-				return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to upsert password"})
-			}
+			// /admin/auth - authentication for admin route
+			admin.Route("/auth", func(auth fiber.Router) {
+				auth.Get("/login", quemotfiber.NewLoginController(func(c *fiber.Ctx) LoginState {
+					cameFromParam := c.Query("came_from")
+					var cameFrom string
+					if cameFromParam != "" {
+						cameFromBytes, err := base64.URLEncoding.DecodeString(cameFromParam)
+						if err == nil {
+							cameFrom = string(cameFromBytes)
+						}
+					}
 
-			return ctx.SendStatus(fiber.StatusNoContent)
+					return LoginState{CameFrom: cameFrom}
+				}))
+				auth.Get("/logout", func(c *fiber.Ctx) error {
+					// TODO: Invalidate token(s)
+					c.ClearCookie(TokenCookieName)
+					return c.SendString("Logout successful")
+				})
+				auth.Get("/callback", quemotfiber.NewCallbackController(func(c *fiber.Ctx, s LoginState, t *oauth2.Token) error {
+					c.Cookie(&fiber.Cookie{
+						Name:  "access_token",
+						Value: t.AccessToken,
+					})
+
+					if s.CameFrom != "" {
+						c.Redirect(s.CameFrom)
+					}
+					return c.SendString("Login successful")
+				}))
+			})
+		} else {
+			slog.Warn("skipping registration of authentication-related endpoints", "disableAuth", disableAuth)
+		}
+
+		// /admin/api - API routes for admin
+		admin.Route("/api", func(api fiber.Router) {
+			api.Use(cors.New(cors.Config{
+				AllowOrigins: allowedOrigins,
+			}))
+			if !disableAuth {
+				api.Use(quemotfiber.ValidateAccessTokenMiddleware(TokenLocalName, TokenCookieName))
+			} else {
+				slog.Warn("skipping registration of token validation middleware", "disableAuth", disableAuth)
+			}
+			api.Get("/", func(ctx *fiber.Ctx) error {
+				ids, err := DB.ListIds()
+				if err != nil {
+					slog.Error("failed to load password ids", "err", err)
+					return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to load password ids"})
+				}
+				responsePayload := utils.Map(ids, func(id string) GetPasswordEntryResponse { return GetPasswordEntryResponse{id} })
+				return ctx.JSON(responsePayload)
+			})
+			api.Get("/:id", func(ctx *fiber.Ctx) error {
+				id := ctx.Params("id", "")
+				if id == "" {
+					return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"id must be provided"})
+				}
+				password, err := DB.GetPassword(id)
+				if err != nil {
+					slog.Error("failed to retrieve password", "id", id, "err", err)
+					return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to retrieve password"})
+				}
+				if password == nil {
+					return ctx.SendStatus(fiber.StatusNotFound)
+				}
+				passwordStr := string(password)
+				return ctx.JSON(GetPasswordResponse{id, passwordStr})
+			})
+			api.Post("/:id", func(ctx *fiber.Ctx) error {
+				id := ctx.Params("id", "")
+				if id == "" {
+					return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"id must be provided"})
+				}
+				requestPayload := new(UpsertPasswordRequest)
+				if err := ctx.BodyParser(requestPayload); err != nil || requestPayload.Password == "" {
+					slog.Debug("invalid request body for upserting password", "id", id, "err", err)
+					return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"could not parse request body"})
+				}
+				if err := DB.UpsertPassword(id, requestPayload.Password); err != nil {
+					slog.Error("failed to upsert password", "id", id, "err", err)
+					return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to upsert password"})
+				}
+
+				return ctx.SendStatus(fiber.StatusNoContent)
+			})
+			api.Delete("/:id", func(ctx *fiber.Ctx) error {
+				id := ctx.Params("id", "")
+				if id == "" {
+					return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{"id must be provided"})
+				}
+				deleted, err := DB.DeleteEntry(id)
+				if err != nil {
+					slog.Error("failed to delete entry", "id", id, "err", err)
+					return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{"failed to delete entry"})
+				}
+				if !deleted {
+					return ctx.Status(fiber.StatusNotFound).JSON(ErrorResponse{fmt.Sprintf("no entry found with id %s", id)})
+				}
+				return ctx.SendStatus(fiber.StatusNoContent)
+			})
+		})
+
+		// /admin/* - web endpoints for admin
+		admin.Route("/", func(web fiber.Router) {
+			web.Get("/*.js", func(c *fiber.Ctx) error {
+				filename := c.Params("*")
+				content, err := jsCache.Get(filename + ".js")
+				if err != nil {
+					slog.Error("failed to get file from cache", "filename", filename+".js", "error", err)
+					return c.SendStatus(fiber.StatusInternalServerError)
+				}
+				finalContent := renderer.Render(content)
+
+				c.Type(".js")
+				return c.SendStream(bytes.NewBuffer(finalContent))
+			})
+			web.Use(filesystem.New(filesystem.Config{
+				// This should encompass: /, /login, /edit
+				Root:   http.Dir(staticFilesDir),
+				Browse: false,
+				Index:  "index.html",
+
+				// TODO: 404 page?
+			}))
 		})
 	})
-	if !disableAuth {
-		app.Route("/auth", func(auth fiber.Router) {
-			auth.Get("/login", quemotfiber.NewLoginController(func(c *fiber.Ctx) LoginState {
-				cameFromParam := c.Query("came_from")
-				var cameFrom string
-				if cameFromParam != "" {
-					cameFromBytes, err := base64.URLEncoding.DecodeString(cameFromParam)
-					if err == nil {
-						cameFrom = string(cameFromBytes)
-					}
-				}
-
-				return LoginState{CameFrom: cameFrom}
-			}))
-			auth.Get("/logout", func(c *fiber.Ctx) error {
-				// TODO: Invalidate token(s)
-				c.ClearCookie(TokenCookieName)
-				return c.SendString("Logout successful")
-			})
-			auth.Get("/callback", quemotfiber.NewCallbackController(func(c *fiber.Ctx, s LoginState, t *oauth2.Token) error {
-				c.Cookie(&fiber.Cookie{
-					Name:  "access_token",
-					Value: t.AccessToken,
-				})
-
-				if s.CameFrom != "" {
-					c.Redirect(s.CameFrom)
-				}
-				return c.SendString("Login successful")
-			}))
-		})
-	} else {
-		slog.Warn("skipping registration of authentication-related endpoints", "disableAuth", disableAuth)
-	}
 
 	slog.Info("listening for requests", "port", port)
 	err = app.Listen(fmt.Sprintf(":%d", port))

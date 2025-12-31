@@ -120,6 +120,23 @@ func (passddb *PassdDb) UpsertPassword(id string, password string) error {
 	return nil
 }
 
+func (passddb *PassdDb) DeleteEntry(id string) (bool, error) {
+	stmt, err := passddb.db.Prepare("DELETE FROM passwords WHERE id = ?")
+	if err != nil {
+		return false, fmt.Errorf("failed to prepare query: %w", err)
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(id)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete entry: %w", err)
+	}
+
+	// We're ignoring the error here b/c we know our driver supports RowsAffected()
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected > 0, nil
+}
+
 func (passddb *PassdDb) GetPassword(id string) ([]byte, error) {
 	stmt, err := passddb.db.Prepare("SELECT password_enc FROM passwords WHERE id = ?")
 	if err != nil {

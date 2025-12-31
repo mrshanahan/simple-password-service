@@ -1,0 +1,99 @@
+#main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+}
+
+#entries-container {
+    width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.entry-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /*width: 500px;*/
+    background-color: lightgray;
+    padding: 1em;
+}
+
+.entry {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 350px;
+}
+
+.entry-top-bar {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.entry-top-bar input {
+    font-size: large;
+    flex-grow: 2;
+}
+
+.entry-bottom-bar {
+    display: flex;
+    flex-direction: row;
+    /*flex-wrap: nowrap;**/
+}
+
+.entry-bottom-bar input {
+    font-size: large;
+    flex-grow: 2;
+}
+
+.entry-update-password-button {
+    width: fit-content;
+    margin-left: 5px;
+    font-size: medium;
+}
+
+.entry-new-create-button {
+    width: fit-content;
+    margin-left: 5px;
+    font-size: medium;
+}
+
+.entry-reveal-password-button {
+    width: fit-content;
+    margin-left: 5px;
+    font-size: medium;
+}
+
+button {
+    width: 30px;
+    height: 30px;
+}
+
+#entry-new-add-button {
+    width: 50px;
+    height: 50px;
+}
+
+.entry label {
+    font-family: monospace;
+    font-size: larger;
+}
+
+/*.entry-new-add-button {
+    cursor: pointer;
+    background-color: transparent;
+    border: none;
+
+}*/
+
+.entry-delete-button {
+    font-weight: bold;
+    background-color: lightcoral;
+    color: black;
+    margin-left: 5px;
+}
