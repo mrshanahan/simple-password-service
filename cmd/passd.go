@@ -323,6 +323,14 @@ func Run() int {
 
 	// /admin - route for editing password entries
 	app.Route("/admin", func(admin fiber.Router) {
+		admin.Use(func(c *fiber.Ctx) error {
+			path := c.OriginalURL()
+			if strings.HasSuffix(path, "/admin") {
+				return c.Redirect(path + "/")
+			}
+			return c.Next()
+		})
+
 		if !disableAuth {
 			// /admin/auth - authentication for admin route
 			admin.Route("/auth", func(auth fiber.Router) {
