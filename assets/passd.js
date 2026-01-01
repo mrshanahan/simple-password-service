@@ -93,7 +93,7 @@ function genericSend(method, url, token, callback, preReauthCallback, responseTr
                 preReauthCallback();
             }
             const origin = window.location.href;
-            window.location.href = "/auth/login?origin_url=" + encodeURI(origin);
+            window.location.href = "./auth/login?origin_url=" + encodeURI(origin);
         } else {
             console.error('Request failed with status:', xhr.status);
         }
@@ -125,7 +125,7 @@ function genericSendWithPayload(method, url, payload, token, callback, preReauth
                 preReauthCallback();
             }
             const origin = window.location.href;
-            window.location.href = "/auth/login?origin_url=" + encodeURI(origin);
+            window.location.href = "./auth/login?origin_url=" + encodeURI(origin);
         } else {
             console.error('Request failed with status:', xhr.status);
         }
