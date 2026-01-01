@@ -350,7 +350,7 @@ func Run() int {
 					})
 
 					if s.CameFrom != "" {
-						c.Redirect(s.CameFrom)
+						return c.Redirect(s.CameFrom)
 					}
 					return c.SendString("Login successful")
 				}))
@@ -429,7 +429,7 @@ func Run() int {
 		})
 
 		// /admin/* - web endpoints for admin
-		admin.Get("/*.js", func(c *fiber.Ctx) error {
+		admin.Get("*.js", func(c *fiber.Ctx) error {
 			filename := c.Params("*")
 			content, err := jsCache.Get(filename + ".js")
 			if err != nil {
