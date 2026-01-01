@@ -1,0 +1,81 @@
+{
+    "locations": [
+        {
+            "type": "local",
+            "name": "local"
+        },
+        {
+            "type": "ssh",
+            "name": "quemot.dev",
+            "server": "quemot.dev:22",
+            "username": "{{ SSH_USERNAME }}",
+            "key_file": "{{ SSH_KEY_FILE }}",
+            "key_file_passphrase": "{{ SSH_KEY_FILE_PASSPHRASE }}",
+            "run_elevated": true
+        }
+    ],
+    "transport": {
+        "type": "s3",
+        "bucket_url": "s3://quemot-dev-bucket//deploy-assets"
+    },
+    "assets": [
+        {
+            "type": "file",
+            "name": "docker-compose",
+            "src": "local",
+            "dst": "*",
+            "src_path": "docker-compose.prod.yml",
+            "dst_path": "/etc/quemot-dev/passd/docker-compose.yml",
+            "force": true
+        },
+        {
+            "type": "docker_image",
+            "name": "docker-images",
+            "src": "local",
+            "dst": "*",
+            "repository": [
+                "quemot-dev/passd"
+            ],
+            "compare_label": "dev.quemot.passd.image.sha",
+            "post_command": [
+                {
+                    "command": "systemctl is-active passd.service >/dev/null && systemctl restart passd.service",
+                    "trigger": "on_updated"
+                }
+            ]
+        },
+        {
+            "type": "file",
+            "name": "service-install-files",
+            "src": "local",
+            "dst": "*",
+            "src_path": "install/",
+            "dst_path": "/etc/quemot-dev/passd/install/",
+            "force": true,
+            "post_command": [
+                {
+                    "command": "systemctl enable /etc/quemot-dev/passd/install/*.service --now",
+                    "trigger": "on_changed"
+                }
+            ]
+        },
+        {
+            "type": "file",
+            "name": "nginx-conf",
+            "src": "local",
+            "dst": "*",
+            "src_path": "nginx/passd-quemot-dev.conf",
+            "dst_path": "/etc/nginx/sites-available/passd-quemot-dev.conf",
+            "post_command": [
+                {
+                    "command": "ln -s /etc/nginx/sites-available/passd-quemot-dev.conf /etc/nginx/sites-enabled/passd-quemot-dev.conf",
+                    "trigger": "on_created"
+                },
+                {
+                    "command": "nginx -t && nginx -s reload",
+                    "trigger": "on_changed"
+                }
+            ]
+        }
+    ]
+}

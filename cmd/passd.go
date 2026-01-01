@@ -429,28 +429,26 @@ func Run() int {
 		})
 
 		// /admin/* - web endpoints for admin
-		admin.Route("/", func(web fiber.Router) {
-			web.Get("/*.js", func(c *fiber.Ctx) error {
-				filename := c.Params("*")
-				content, err := jsCache.Get(filename + ".js")
-				if err != nil {
-					slog.Error("failed to get file from cache", "filename", filename+".js", "error", err)
-					return c.SendStatus(fiber.StatusInternalServerError)
-				}
-				finalContent := renderer.Render(content)
+		admin.Get("/*.js", func(c *fiber.Ctx) error {
+			filename := c.Params("*")
+			content, err := jsCache.Get(filename + ".js")
+			if err != nil {
+				slog.Error("failed to get file from cache", "filename", filename+".js", "error", err)
+				return c.SendStatus(fiber.StatusInternalServerError)
+			}
+			finalContent := renderer.Render(content)
 
-				c.Type(".js")
-				return c.SendStream(bytes.NewBuffer(finalContent))
-			})
-			web.Use(filesystem.New(filesystem.Config{
-				// This should encompass: /, /login, /edit
-				Root:   http.Dir(staticFilesDir),
-				Browse: false,
-				Index:  "index.html",
-
-				// TODO: 404 page?
-			}))
+			c.Type(".js")
+			return c.SendStream(bytes.NewBuffer(finalContent))
 		})
+		admin.Use(filesystem.New(filesystem.Config{
+			// This should encompass: /, /login, /edit
+			Root:   http.Dir(staticFilesDir),
+			Browse: false,
+			Index:  "index.html",
+
+			// TODO: 404 page?
+		}))
 	})
 
 	slog.Info("listening for requests", "port", port)

@@ -30,7 +30,7 @@ function getUrlQueryParameter(name) {
 }
 
 function validateAuthToken() {
-    const token = getCookie('access_token') || 'abc'
+    const token = getCookie('access_token')
     if (!token) {
         window.location.href = "/auth/login?reason=unauthenticated"
     }

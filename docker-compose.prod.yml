@@ -1,0 +1,17 @@
+# Variables:
+# - API_PORT (default: 5555): Port to expose for passd API
+
+services:
+  passd:
+    image: quemot-dev/passd
+    ports:
+      - ${API_PORT:-5555}:80
+    environment:
+      PASSD_DB_PATH: /app/data/passd.sqlite
+      PASSD_KEY_PATH: /app/data/passd.key
+      PASSD_PORT: 80
+      PASSD_AUTH_PROVIDER_URL: https://auth.quemot.dev/realms/passd
+      PASSD_REDIRECT_URL: https://passd.quemot.dev/admin/auth/callback
+      PASSD_ALLOWED_ORIGINS: https://passd.quemot.dev
+    volumes:
+      - ./data:/app/data
