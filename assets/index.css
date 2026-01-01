@@ -1,3 +1,14 @@
+:root {
+    --pane-width: 800px;
+    --entry-width: 500px;
+    --entry-button-dim: 40px;
+    --entry-buttom-img-dim: 30px;
+    --add-button-dim: 50px;
+    --add-button-img-dim: 40px;
+    --entry-button-font-size: medium;
+    --entry-id-label-font-size: x-large;
+}
+
 #main {
     display: flex;
     flex-direction: column;
@@ -6,7 +17,7 @@
 }
 
 #entries-container {
-    width: 800px;
+    width: var(--pane-width);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -17,7 +28,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    /*width: 500px;*/
     background-color: lightgray;
     padding: 1em;
 }
@@ -26,7 +36,7 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
-    width: 350px;
+    width: var(--entry-width);
 }
 
 .entry-top-bar {
@@ -54,46 +64,56 @@
 .entry-update-password-button {
     width: fit-content;
     margin-left: 5px;
-    font-size: medium;
+    font-size: var(--entry-button-font-size);
 }
 
 .entry-new-create-button {
     width: fit-content;
     margin-left: 5px;
-    font-size: medium;
+    font-size: var(--entry-button-font-size);
 }
 
 .entry-reveal-password-button {
     width: fit-content;
     margin-left: 5px;
-    font-size: medium;
+    font-size: var(--entry-button-font-size);
+}
+
+.entry-cancel-password-button {
+    width: fit-content;
+    margin-left: 5px;
+    font-size: var(--entry-button-font-size);
 }
 
 button {
-    width: 30px;
-    height: 30px;
+    width: var(--entry-button-dim);
+    height: var(--entry-button-dim);
 }
 
 #entry-new-add-button {
-    width: 50px;
-    height: 50px;
+    width: var(--add-button-dim);
+    height: var(--add-button-dim);
 }
 
 .entry label {
     font-family: monospace;
-    font-size: larger;
+    font-size: var(--entry-id-label-font-size);
 }
 
-/*.entry-new-add-button {
-    cursor: pointer;
-    background-color: transparent;
-    border: none;
+.entry img {
+    width: var(--entry-buttom-img-dim);
+    height: var(--entry-buttom-img-dim);
+}
 
-}*/
+.entry-create-button-container img {
+    width: var(--add-button-img-dim);
+    height: var(--add-button-img-dim);
+}
 
 .entry-delete-button {
     font-weight: bold;
     background-color: lightcoral;
     color: black;
     margin-left: 5px;
+    font-size: var(--entry-button-font-size);
 }
