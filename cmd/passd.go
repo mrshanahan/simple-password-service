@@ -332,6 +332,8 @@ func Run() int {
 		})
 
 		if !disableAuth {
+			admin.Use(quemotfiber.ValidateAccessTokenMiddleware(TokenLocalName, TokenCookieName))
+
 			// /admin/auth - authentication for admin route
 			admin.Route("/auth", func(auth fiber.Router) {
 				auth.Get("/login", quemotfiber.NewLoginController(func(c *fiber.Ctx) LoginState {
@@ -353,7 +355,7 @@ func Run() int {
 				})
 				auth.Get("/callback", quemotfiber.NewCallbackController(func(c *fiber.Ctx, s LoginState, t *oauth2.Token) error {
 					c.Cookie(&fiber.Cookie{
-						Name:  "access_token",
+						Name:  TokenCookieName,
 						Value: t.AccessToken,
 					})
 
